@@ -1,0 +1,110 @@
+{{>processando}}
+
+<h4>
+  <i class="material-icons left">assignment</i>
+  {{t "detalhesChamado.titulo"}}
+</h4>
+<blockquote>
+  {{t "detalhesChamado.mensagemInfo"}}
+</blockquote>
+
+<div class="row" style="margin-top: 10px;">
+  <div class="input-field col m12 s12">
+    <input disabled value="{{chamado.titulo}}" id="titulo" type="text">
+    <label for="titulo">{{t "detalhesChamado.label.tituloChamado"}}</label>
+  </div>
+
+  <div class="input-field col m2 s12">
+    <input disabled value="{{chamado.id}}" id="codigo" type="text">
+    <label for="codigo">{{t "detalhesChamado.label.codigo"}}</label>
+  </div>
+
+  <div class="input-field col m4 s12">
+    <input disabled value="{{chamado.tipoDescr}}" id="tipo" type="text">
+    <label for="tipo">{{t "detalhesChamado.label.tipoChamado"}}</label>
+  </div>
+
+  <div class="input-field col m4 s12">
+    <select disabled>
+      <option {{#ifEqual chamado.situacao '1'}}selected{{/ifEqual}} value="1">{{t "detalhesChamado.label.aberto"}}</option>
+      <option {{#ifEqual chamado.situacao '2'}}selected{{/ifEqual}} value="2">{{t "detalhesChamado.label.aguardandoOperador"}}</option>
+      <option {{#ifEqual chamado.situacao '3'}}selected{{/ifEqual}} value="3">{{t "detalhesChamado.label.aguardandoCliente"}}</option>
+      <option {{#ifEqual chamado.situacao '4'}}selected{{/ifEqual}} value="4">{{t "detalhesChamado.label.concluido"}}</option>
+    </select>
+    <label>{{t "detalhesChamado.label.situacao"}}</label>
+  </div>
+
+  {{>modals/anexos-chamado}}
+  <div class="input-field col m2 s12">
+    <a class="btn modal-trigger" href="#anexos-chamado" style="width: 100%;">
+      {{t "detalhesChamado.buttons.verAnexos"}}</a>
+  </div>
+
+  {{!-- <div class="input-field col s12">
+    <textarea id="detalhes" class="materialize-textarea" disabled>{{chamado.detalhes}}</textarea>
+    <label for="detalhes">Detalhes</label>
+  </div> --}}
+
+  <div class="input-field col m12 s12">
+    <ul id="lista-interacoes" class="collection">
+      {{#if interacao.listaInteracoes}}
+        {{#each interacao.listaInteracoes}}
+          <li class="collection-item">
+            <span class="collection-item-title">
+              <b>
+                {{#if nomeUsuario}}
+                  {{nomeUsuario}} ({{emailUsuario}})
+                {{else}}
+                  {{emailUsuario}}
+                {{/if}}
+              </b>
+              {{t "detalhesChamado.label.em"}} <b>{{dataHoraInteracao}}</b>:
+            </span>
+
+            <div class="collection-item-body">
+              {{detalhes}}
+            </div>
+          </li>
+        {{/each}}
+      {{/if}}
+    </ul>
+  </div>
+
+  {{#ifNEqual chamado.situacao '4'}}
+    <form method="POST" enctype="multipart/form-data" id="form-resposta" action="/chamados/{{chamado.id}}">
+      <div class="input-field col s12 m12">
+        <textarea class="materialize-textarea" name="detalhes" placeholder="Resposta" id="detalhes" {{#ifEqual permiteResponder 'N' }}disabled{{/ifEqual}}></textarea>
+        <label for="detalhes">{{t "detalhesChamado.label.resposta"}}</label>
+        <span class="helper-text">{{t "detalhesChamado.label.mensagemResposta"}}</span>
+      </div>
+
+      <div class="input-field col s12 m3" style="width: 190px;">
+        <a onclick="anexarArquivo()" class="btn btn-small" {{#ifEqual permiteResponder 'N' }}disabled{{/ifEqual}}>
+          <i class="material-icons left">attach_file</i>
+          {{t "detalhesChamado.buttons.adicionarAnexo"}}
+        </a>
+      </div>
+      <div class="input-field col s12 m6" style="margin-top: 7px;">
+        <p>
+          <label>
+            <input value='S' name="finalizarChamado" type="checkbox" class="filled-in" {{#ifEqual permiteResponder 'N' }}disabled{{/ifEqual}}/>
+            <span>{{t "detalhesChamado.label.finalizarChamado"}}</span>
+          </label>
+        </p>
+      </div>
+      <div class="input-field col s12 m12">      
+        <div class="file-path-wrapper" id="file-path-wrapper-tags"></div>
+      </div>
+    </form>
+  {{/ifNEqual}}
+
+  <div class="input-field col s12 m12">
+    {{#ifNEqual chamado.situacao '4'}}<a class="btn" onclick="responderChamado()"
+      {{#ifEqual permiteResponder 'N' }}disabled{{/ifEqual}}>{{t "detalhesChamado.buttons.responderChamado"}}</a>
+    {{/ifNEqual}}
+    <a class="btn-flat" onclick="window.history.go(-1); return false;">{{t "buttons.voltar"}}</a>     
+  </div>
+  
+</div>
+
+<script src="/js/chamado.js"></script>

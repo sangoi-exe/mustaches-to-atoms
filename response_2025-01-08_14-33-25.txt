@@ -1,0 +1,736 @@
+Para corrigir os erros no seu código TypeScript, vamos analisar cada erro individualmente e implementar as correções necessárias. Fornecerei trechos de código e indicações de onde eles devem ser colocados. Usaremos ao máximo as funcionalidades do Glimmer e do Babel antes de considerar a criação de novas interfaces ou funções.
+
+### **1. Erro: "Property 'fn' does not exist on type 'Expression'"**
+
+**Linhas afetadas:** 32, 35 e 37 em `assinaturaHelpers.ts`.
+
+**Descrição do erro:**
+
+Esses erros ocorrem porque estamos tentando acessar as propriedades `fn` e `inverse` em um objeto do tipo `Babel.Expression`, que não possui essas propriedades.
+
+**Correção:**
+
+Precisamos ajustar o modo como manipulamos o objeto `options` dentro dos helpers. O `options` pode ser uma função (no caso de não haver um bloco `{{else}}`) ou um objeto com as propriedades `fn` e `inverse` (quando há um bloco `{{else}}`). Devemos distinguir esses casos e extrair corretamente as funções correspondentes.
+
+**Passos detalhados:**
+
+1. **Atualizar o tipo `HelperFunction` para aceitar diferentes tipos de argumentos:**
+
+   ```typescript
+   type HelperFunction = (...args: (Babel.Expression | Babel.ArrowFunctionExpression | Babel.ObjectExpression)[]) => Babel.Expression;
+   ```
+
+   *Coloque isso onde o `HelperFunction` é definido, na linha 8 de `assinaturaHelpers.ts`.*
+
+2. **Modificar o helper `ifEqual`:**
+
+   **Código original:**
+
+   ```typescript
+   ifEqual: function (arg1, arg2, options) {
+     return Babel.conditionalExpression(
+       Babel.binaryExpression("==", arg1, arg2),
+       Babel.callExpression(options, []),
+       Babel.callExpression(Babel.memberExpression(options, Babel.identifier("inverse")), []),
+     );
+   },
+   ```
+
+   **Código corrigido:**
+
+   ```typescript
+   ifEqual: function (arg1: Babel.Expression, arg2: Babel.Expression, options: Babel.ArrowFunctionExpression | Babel.ObjectExpression): Babel.Expression {
+     let consequent: Babel.Expression;
+     let alternate: Babel.Expression;
+
+     if (Babel.isArrowFunctionExpression(options)) {
+       // Caso não haja bloco {{else}}
+       consequent = Babel.callExpression(options, []);
+       alternate = Babel.nullLiteral();
+     } else if (Babel.isObjectExpression(options)) {
+       // Caso haja bloco {{else}}
+       const fnProperty = options.properties.find(
+         (prop) => Babel.isObjectProperty(prop) && Babel.isIdentifier(prop.key) && prop.key.name === 'fn'
+       ) as Babel.ObjectProperty | undefined;
+
+       const inverseProperty = options.properties.find(
+         (prop) => Babel.isObjectProperty(prop) && Babel.isIdentifier(prop.key) && prop.key.name === 'inverse'
+       ) as Babel.ObjectProperty | undefined;
+
+       if (!fnProperty || !inverseProperty) {
+         throw new Error('Invalid options object');
+       }
+
+       consequent = Babel.callExpression(fnProperty.value as Babel.Expression, []);
+       alternate = Babel.callExpression(inverseProperty.value as Babel.Expression, []);
+     } else {
+       throw new Error('Invalid options type');
+     }
+
+     return Babel.conditionalExpression(
+       Babel.binaryExpression("==", arg1, arg2),
+       consequent,
+       alternate,
+     );
+   },
+   ```
+
+   *Substitua o código do helper `ifEqual` existente no objeto `assinaturaHelpers` pela versão acima.*
+
+3. **Repetir o mesmo processo para o helper `ifNEqual`:**
+
+   **Código corrigido:**
+
+   ```typescript
+   ifNEqual: function (arg1: Babel.Expression, arg2: Babel.Expression, options: Babel.ArrowFunctionExpression | Babel.ObjectExpression): Babel.Expression {
+     let consequent: Babel.Expression;
+     let alternate: Babel.Expression;
+
+     if (Babel.isArrowFunctionExpression(options)) {
+       // Caso não haja bloco {{else}}
+       consequent = Babel.callExpression(options, []);
+       alternate = Babel.nullLiteral();
+     } else if (Babel.isObjectExpression(options)) {
+       // Caso haja bloco {{else}}
+       const fnProperty = options.properties.find(
+         (prop) => Babel.isObjectProperty(prop) && Babel.isIdentifier(prop.key) && prop.key.name === 'fn'
+       ) as Babel.ObjectProperty | undefined;
+
+       const inverseProperty = options.properties.find(
+         (prop) => Babel.isObjectProperty(prop) && Babel.isIdentifier(prop.key) && prop.key.name === 'inverse'
+       ) as Babel.ObjectProperty | undefined;
+
+       if (!fnProperty || !inverseProperty) {
+         throw new Error('Invalid options object');
+       }
+
+       consequent = Babel.callExpression(fnProperty.value as Babel.Expression, []);
+       alternate = Babel.callExpression(inverseProperty.value as Babel.Expression, []);
+     } else {
+       throw new Error('Invalid options type');
+     }
+
+     return Babel.conditionalExpression(
+       Babel.binaryExpression("!=", arg1, arg2),
+       consequent,
+       alternate,
+     );
+   },
+   ```
+
+   *Substitua o código do helper `ifNEqual` existente no objeto `assinaturaHelpers` pela versão acima.*
+
+4. **Atualizar o `getAssinaturaHelper`:**
+
+   Certifique-se de que o `getAssinaturaHelper` continue a passar o `options` corretamente para os helpers. Já que estamos usando `Babel.ArrowFunctionExpression` e `Babel.ObjectExpression`, não há necessidade de mudanças significativas aqui.
+
+   *Verifique se no `getAssinaturaHelper` você está passando `options` corretamente, conforme já está no seu código.*
+
+---
+
+### **2. Erro: "Element implicitly has an 'any' type because expression of type 'string' can't be used to index type..."**
+
+**Linha afetada:** 87 em `assinaturaHelpers.ts`.
+
+**Descrição do erro:**
+
+O TypeScript não consegue garantir que a chave usada para indexar o objeto `operators` é uma das chaves definidas. Isso acontece porque `operator.value` é uma string genérica.
+
+**Correção:**
+
+Precisamos informar ao TypeScript que `operator.value` é uma das chaves permitidas no objeto `operators`. Além disso, devemos assegurar que `operator` é um `Babel.StringLiteral`.
+
+**Passos detalhados:**
+
+1. **Especificar o tipo de `operator`:**
+
+   ```typescript
+   ifCond: function (v1: Babel.Expression, operator: Babel.StringLiteral, v2: Babel.Expression, options: Babel.ArrowFunctionExpression | Babel.ObjectExpression): Babel.Expression {
+   ```
+
+   *Atualize a assinatura da função `ifCond` para especificar que `operator` é um `Babel.StringLiteral`.*
+
+2. **Garantir que `operator.value` é uma chave válida:**
+
+   **Código corrigido:**
+
+   ```typescript
+   ifCond: function (v1: Babel.Expression, operator: Babel.StringLiteral, v2: Babel.Expression, options: Babel.ArrowFunctionExpression | Babel.ObjectExpression): Babel.Expression {
+     const operators: { [key: string]: Babel.BinaryExpression["operator"] } = {
+       "==": "==",
+       "===": "===",
+       "!=": "!=",
+       "!==": "!==",
+       "<": "<",
+       "<=": "<=",
+       ">": ">",
+       ">=": ">=",
+       "&&": "&&",
+       "||": "||",
+     };
+
+     const op = operator.value;
+
+     if (!(op in operators)) {
+       throw new Error("Invalid operator for ifCond");
+     }
+
+     let consequent: Babel.Expression;
+     let alternate: Babel.Expression;
+
+     if (Babel.isArrowFunctionExpression(options)) {
+       consequent = Babel.callExpression(options, []);
+       alternate = Babel.nullLiteral();
+     } else if (Babel.isObjectExpression(options)) {
+       const fnProperty = options.properties.find(
+         (prop) => Babel.isObjectProperty(prop) && Babel.isIdentifier(prop.key) && prop.key.name === 'fn'
+       ) as Babel.ObjectProperty | undefined;
+
+       const inverseProperty = options.properties.find(
+         (prop) => Babel.isObjectProperty(prop) && Babel.isIdentifier(prop.key) && prop.key.name === 'inverse'
+       ) as Babel.ObjectProperty | undefined;
+
+       if (!fnProperty || !inverseProperty) {
+         throw new Error('Invalid options object');
+       }
+
+       consequent = Babel.callExpression(fnProperty.value as Babel.Expression, []);
+       alternate = Babel.callExpression(inverseProperty.value as Babel.Expression, []);
+     } else {
+       throw new Error('Invalid options type');
+     }
+
+     return Babel.conditionalExpression(
+       Babel.binaryExpression(operators[op], v1, v2),
+       consequent,
+       alternate,
+     );
+   },
+   ```
+
+   *Substitua o código do helper `ifCond` existente no objeto `assinaturaHelpers` pela versão acima.*
+
+---
+
+### **3. Erros relacionados ao retorno de tipos incompatíveis (BlockStatement, IfStatement, SwitchStatement, TryStatement)**
+
+**Linhas afetadas:** 93, 144, 275, 308, 381 e 399 em `assinaturaHelpers.ts`.
+
+**Descrição dos erros:**
+
+Os helpers estão retornando tipos como `BlockStatement`, `IfStatement`, `SwitchStatement` e `TryStatement`, que não são `Babel.Expression`. Isso causa incompatibilidades com o tipo esperado pelo `HelperFunction`.
+
+**Correção:**
+
+Envolver o conteúdo dos helpers em uma IIFE (Immediately Invoked Function Expression) usando uma `ArrowFunctionExpression` e uma `CallExpression`. Isso transforma o bloco de código em uma expressão, que é o tipo esperado.
+
+**Passos detalhados:**
+
+1. **Modificar o helper `calculateCarouselMargin`:**
+
+   **Código original:**
+
+   ```typescript
+   calculateCarouselMargin: function (size: Babel.Expression) {
+     const condition1 = Babel.ifStatement(
+       Babel.binaryExpression("<=", size, Babel.numericLiteral(5)),
+       Babel.blockStatement([Babel.returnStatement(Babel.numericLiteral(405))]),
+     );
+     // ... restante do código
+     return Babel.blockStatement([condition1, condition2, defaultReturn]);
+   },
+   ```
+
+   **Código corrigido:**
+
+   ```typescript
+   calculateCarouselMargin: function (size: Babel.Expression): Babel.Expression {
+     const condition1 = Babel.ifStatement(
+       Babel.binaryExpression("<=", size, Babel.numericLiteral(5)),
+       Babel.blockStatement([Babel.returnStatement(Babel.numericLiteral(405))]),
+     );
+
+     const condition2 = Babel.ifStatement(
+       Babel.binaryExpression(">=", size, Babel.numericLiteral(10)),
+       Babel.blockStatement([
+         Babel.returnStatement(
+           Babel.binaryExpression(
+             "+",
+             Babel.numericLiteral(405),
+             Babel.binaryExpression(
+               "*",
+               Babel.callExpression(
+                 Babel.memberExpression(Babel.identifier("Math"), Babel.identifier("floor")),
+                 [Babel.binaryExpression("/", size, Babel.numericLiteral(3))],
+               ),
+               Babel.numericLiteral(200),
+             ),
+           ),
+         ),
+       ]),
+     );
+
+     const defaultReturn = Babel.returnStatement(
+       Babel.binaryExpression(
+         "+",
+         Babel.numericLiteral(405),
+         Babel.binaryExpression(
+           "*",
+           Babel.callExpression(
+             Babel.memberExpression(Babel.identifier("Math"), Babel.identifier("floor")),
+             [Babel.binaryExpression("/", size, Babel.numericLiteral(4))],
+           ),
+           Babel.numericLiteral(200),
+         ),
+       ),
+     );
+
+     const block = Babel.blockStatement([condition1, condition2, defaultReturn]);
+
+     return Babel.callExpression(
+       Babel.arrowFunctionExpression([], block),
+       []
+     );
+   },
+   ```
+
+   *Substitua o código do helper `calculateCarouselMargin` existente no objeto `assinaturaHelpers` pela versão acima.*
+
+2. **Repetir o processo para os outros helpers que retornam tipos incompatíveis:**
+
+   **a. Helper `jsonStringify`:**
+
+   Este helper já retorna uma `Babel.Expression`, então não precisa de ajuste.
+
+   **b. Helper `numberToPhone`:**
+
+   **Código corrigido:**
+
+   ```typescript
+   numberToPhone: function (valor: Babel.Expression): Babel.Expression {
+     const valorLimpo = Babel.variableDeclaration("let", [
+       Babel.variableDeclarator(
+         Babel.identifier("valorLimpo"),
+         Babel.callExpression(
+           Babel.memberExpression(
+             Babel.callExpression(
+               Babel.memberExpression(valor, Babel.identifier("replace")),
+               [Babel.regExpLiteral("\\D", "g"), Babel.stringLiteral("")],
+             ),
+             Babel.identifier("toString"),
+           ),
+           [],
+         ),
+       ),
+     ]);
+
+     const matchCelularNovo = Babel.variableDeclaration("let", [
+       Babel.variableDeclarator(
+         Babel.identifier("matchCelularNovo"),
+         Babel.callExpression(
+           Babel.memberExpression(Babel.identifier("valorLimpo"), Babel.identifier("match")),
+           [Babel.regExpLiteral("^(\\d{2})(\\d{5})(\\d{4})$")],
+         ),
+       ),
+     ]);
+
+     const matchCelularAntigo = Babel.variableDeclaration("let", [
+       Babel.variableDeclarator(
+         Babel.identifier("matchCelularAntigo"),
+         Babel.callExpression(
+           Babel.memberExpression(Babel.identifier("valorLimpo"), Babel.identifier("match")),
+           [Babel.regExpLiteral("^(\\d{2})(\\d{4})(\\d{4})$")],
+         ),
+       ),
+     ]);
+
+     const ifNovo = Babel.ifStatement(
+       Babel.identifier("matchCelularNovo"),
+       Babel.blockStatement([
+         Babel.returnStatement(
+           Babel.callExpression(
+             Babel.memberExpression(
+               Babel.arrayExpression([
+                 Babel.stringLiteral("("),
+                 Babel.memberExpression(Babel.identifier("matchCelularNovo"), Babel.numericLiteral(1), true),
+                 Babel.stringLiteral(") "),
+                 Babel.memberExpression(Babel.identifier("matchCelularNovo"), Babel.numericLiteral(2), true),
+                 Babel.stringLiteral("-"),
+                 Babel.memberExpression(Babel.identifier("matchCelularNovo"), Babel.numericLiteral(3), true),
+               ]),
+               Babel.identifier("join"),
+             ),
+             [Babel.stringLiteral("")],
+           ),
+         ),
+       ]),
+       Babel.ifStatement(
+         Babel.identifier("matchCelularAntigo"),
+         Babel.blockStatement([
+           Babel.returnStatement(
+             Babel.callExpression(
+               Babel.memberExpression(
+                 Babel.arrayExpression([
+                   Babel.stringLiteral("("),
+                   Babel.memberExpression(Babel.identifier("matchCelularAntigo"), Babel.numericLiteral(1), true),
+                   Babel.stringLiteral(") "),
+                   Babel.memberExpression(Babel.identifier("matchCelularAntigo"), Babel.numericLiteral(2), true),
+                   Babel.stringLiteral("-"),
+                   Babel.memberExpression(Babel.identifier("matchCelularAntigo"), Babel.numericLiteral(3), true),
+                 ]),
+                 Babel.identifier("join"),
+               ),
+               [Babel.stringLiteral("")],
+             ),
+           ),
+         ]),
+         Babel.blockStatement([Babel.returnStatement(Babel.nullLiteral())]),
+       ),
+     );
+
+     const block = Babel.blockStatement([valorLimpo, matchCelularNovo, matchCelularAntigo, ifNovo]);
+
+     return Babel.callExpression(
+       Babel.arrowFunctionExpression([], block),
+       []
+     );
+   },
+   ```
+
+   *Substitua o código do helper `numberToPhone` existente no objeto `assinaturaHelpers` pela versão acima.*
+
+   **c. Helper `comparaValorAnterior`:**
+
+   **Código corrigido:**
+
+   ```typescript
+   comparaValorAnterior: function (lista: Babel.Expression, indice: Babel.Expression): Babel.Expression {
+     const condicao = Babel.ifStatement(
+       Babel.binaryExpression("==", indice, Babel.numericLiteral(0)),
+       Babel.blockStatement([Babel.returnStatement(Babel.booleanLiteral(false))]),
+       Babel.blockStatement([
+         Babel.variableDeclaration("const", [
+           Babel.variableDeclarator(
+             Babel.identifier("elAtual"),
+             Babel.unaryExpression("+", Babel.memberExpression(lista, indice, true)),
+           ),
+         ]),
+         Babel.variableDeclaration("const", [
+           Babel.variableDeclarator(
+             Babel.identifier("elAnterior"),
+             Babel.unaryExpression(
+               "+",
+               Babel.memberExpression(
+                 lista,
+                 Babel.binaryExpression("-", indice, Babel.numericLiteral(1)),
+                 true,
+               ),
+             ),
+           ),
+         ]),
+         Babel.returnStatement(
+           Babel.binaryExpression(">", Babel.identifier("elAtual"), Babel.identifier("elAnterior")),
+         ),
+       ]),
+     );
+
+     return Babel.callExpression(
+       Babel.arrowFunctionExpression([], Babel.blockStatement([condicao])),
+       []
+     );
+   },
+   ```
+
+   *Substitua o código do helper `comparaValorAnterior` existente no objeto `assinaturaHelpers` pela versão acima.*
+
+   **d. Helper `comparaValorPosterior`:**
+
+   **Código corrigido:**
+
+   ```typescript
+   comparaValorPosterior: function (lista: Babel.Expression, indice: Babel.Expression): Babel.Expression {
+     const condicao = Babel.ifStatement(
+       Babel.binaryExpression(
+         "==",
+         indice,
+         Babel.binaryExpression(
+           "-",
+           Babel.memberExpression(lista, Babel.identifier("length")),
+           Babel.numericLiteral(1),
+         ),
+       ),
+       Babel.blockStatement([Babel.returnStatement(Babel.booleanLiteral(false))]),
+       Babel.blockStatement([
+         Babel.variableDeclaration("const", [
+           Babel.variableDeclarator(
+             Babel.identifier("elAtual"),
+             Babel.unaryExpression("+", Babel.memberExpression(lista, indice, true)),
+           ),
+         ]),
+         Babel.variableDeclaration("const", [
+           Babel.variableDeclarator(
+             Babel.identifier("elPosterior"),
+             Babel.unaryExpression(
+               "+",
+               Babel.memberExpression(
+                 lista,
+                 Babel.binaryExpression("+", indice, Babel.numericLiteral(1)),
+                 true,
+               ),
+             ),
+           ),
+         ]),
+         Babel.returnStatement(
+           Babel.logicalExpression(
+             "||",
+             Babel.binaryExpression("<", Babel.identifier("elAtual"), Babel.identifier("elPosterior")),
+             Babel.binaryExpression("==", Babel.identifier("elAtual"), Babel.identifier("elPosterior")),
+           ),
+         ),
+       ]),
+     );
+
+     return Babel.callExpression(
+       Babel.arrowFunctionExpression([], Babel.blockStatement([condicao])),
+       []
+     );
+   },
+   ```
+
+   *Substitua o código do helper `comparaValorPosterior` existente no objeto `assinaturaHelpers` pela versão acima.*
+
+   **e. Helper `calculateCampos`:**
+
+   **Código corrigido:**
+
+   ```typescript
+   calculateCampos: function (campos: Babel.Expression): Babel.Expression {
+     const len = Babel.memberExpression(campos, Babel.identifier("length"));
+
+     const switchStatement = Babel.switchStatement(len, [
+       Babel.switchCase(Babel.numericLiteral(1), [
+         Babel.returnStatement(Babel.stringLiteral("input-field col s12 m12 l12")),
+       ]),
+       Babel.switchCase(Babel.numericLiteral(2), [
+         Babel.returnStatement(Babel.stringLiteral("input-field col s12 m6 l6")),
+       ]),
+       Babel.switchCase(null, [
+         Babel.returnStatement(Babel.stringLiteral("input-field col s12 m4 l4")),
+       ]),
+     ]);
+
+     const block = Babel.blockStatement([switchStatement]);
+
+     return Babel.callExpression(
+       Babel.arrowFunctionExpression([], block),
+       []
+     );
+   },
+   ```
+
+   *Substitua o código do helper `calculateCampos` existente no objeto `assinaturaHelpers` pela versão acima.*
+
+   **f. Helper `t`:**
+
+   **Código corrigido:**
+
+   ```typescript
+   t: function (valor: Babel.Expression, ...params: Babel.Expression[]): Babel.Expression {
+     const options = params.pop() as Babel.Expression;
+
+     const idioma = Babel.memberExpression(
+       Babel.memberExpression(
+         Babel.memberExpression(options, Babel.identifier("data")),
+         Babel.identifier("root"),
+       ),
+       Babel.identifier("idioma"),
+     );
+
+     const idiomadefault = Babel.stringLiteral("pt");
+
+     const textoCompletoDecl = Babel.variableDeclaration("let", [
+       Babel.variableDeclarator(Babel.identifier("textoCompleto"), Babel.stringLiteral("")),
+     ]);
+
+     const palavraDecl = Babel.variableDeclaration("let", [
+       Babel.variableDeclarator(
+         Babel.identifier("palavra"),
+         Babel.callExpression(
+           Babel.memberExpression(
+             Babel.callExpression(Babel.memberExpression(valor, Babel.identifier("split")), [
+               Babel.stringLiteral("."),
+             ]),
+             Babel.identifier("reduce"),
+           ),
+           [
+             Babel.arrowFunctionExpression(
+               [Babel.identifier("p"), Babel.identifier("n")],
+               Babel.memberExpression(
+                 Babel.memberExpression(Babel.identifier("global"), Babel.identifier("idiomas")),
+                 idioma,
+                 true,
+               ),
+             ),
+             Babel.memberExpression(
+               Babel.memberExpression(Babel.identifier("global"), Babel.identifier("idiomas")),
+               idioma,
+               true,
+             ),
+           ],
+         ),
+       ),
+     ]);
+
+     const ifPalavra = Babel.ifStatement(
+       Babel.identifier("palavra"),
+       Babel.blockStatement([
+         Babel.expressionStatement(
+           Babel.assignmentExpression(
+             "=",
+             Babel.identifier("textoCompleto"),
+             Babel.identifier("palavra"),
+           ),
+         ),
+       ]),
+       Babel.blockStatement([
+         Babel.expressionStatement(
+           Babel.assignmentExpression(
+             "=",
+             Babel.identifier("textoCompleto"),
+             Babel.callExpression(
+               Babel.memberExpression(
+                 Babel.callExpression(Babel.memberExpression(valor, Babel.identifier("split")), [
+                   Babel.stringLiteral("."),
+                 ]),
+                 Babel.identifier("reduce"),
+               ),
+               [
+                 Babel.arrowFunctionExpression(
+                   [Babel.identifier("p"), Babel.identifier("n")],
+                   Babel.memberExpression(
+                     Babel.memberExpression(Babel.identifier("global"), Babel.identifier("idiomas")),
+                     idiomadefault,
+                     true,
+                   ),
+                 ),
+                 Babel.memberExpression(
+                   Babel.memberExpression(Babel.identifier("global"), Babel.identifier("idiomas")),
+                   idiomadefault,
+                   true,
+                 ),
+               ],
+             ),
+           ),
+         ),
+       ]),
+     );
+
+     const ifParams = Babel.ifStatement(
+       Babel.memberExpression(params, Babel.identifier("length")),
+       Babel.blockStatement([
+         Babel.forInStatement(
+           Babel.variableDeclaration("const", [Babel.variableDeclarator(Babel.identifier("key"))]),
+           params,
+           Babel.blockStatement([
+             Babel.expressionStatement(
+               Babel.assignmentExpression(
+                 "=",
+                 Babel.identifier("textoCompleto"),
+                 Babel.callExpression(
+                   Babel.memberExpression(
+                     Babel.identifier("textoCompleto"),
+                     Babel.identifier("replace"),
+                   ),
+                   [
+                     Babel.templateLiteral(
+                       [
+                         Babel.templateElement({ raw: "$", cooked: "$" }, false),
+                         Babel.templateElement({ raw: "", cooked: "" }, true),
+                       ],
+                       [params[0]],
+                     ),
+                     params[1],
+                   ],
+                 ),
+               ),
+             ),
+           ]),
+         ),
+       ]),
+     );
+
+     const tryCatch = Babel.tryStatement(
+       Babel.blockStatement([
+         textoCompletoDecl,
+         palavraDecl,
+         ifPalavra,
+         ifParams,
+         Babel.returnStatement(Babel.identifier("textoCompleto")),
+       ]),
+       Babel.catchClause(
+         Babel.identifier("error"),
+         Babel.blockStatement([
+           Babel.returnStatement(
+             Babel.memberExpression(Babel.identifier("error"), Babel.identifier("message")),
+           ),
+         ]),
+       ),
+     );
+
+     // Envolver o bloco em uma IIFE
+     return Babel.callExpression(
+       Babel.arrowFunctionExpression([], Babel.blockStatement([tryCatch])),
+       []
+     );
+   },
+   ```
+
+   *Substitua o código do helper `t` existente no objeto `assinaturaHelpers` pela versão acima.*
+
+---
+
+### **4. Erros: "Argument of type 'Expression[]' is not assignable to parameter of type 'Expression'"**
+
+**Linhas afetadas:** 490 e 494 em `assinaturaHelpers.ts`.
+
+**Descrição dos erros:**
+
+Esses erros indicam que estamos passando um array de expressões (`Expression[]`) onde é esperado apenas uma única expressão (`Expression`).
+
+**Correção:**
+
+Devemos garantir que estamos passando uma única expressão em vez de um array.
+
+**Passos detalhados:**
+
+Verifique as linhas 490 e 494 do arquivo e ajuste as chamadas de função para garantir que os argumentos passem a ser do tipo `Expression`.
+
+Por exemplo, se você tem algo como:
+
+```typescript
+Babel.callExpression(func, [args]);
+```
+
+E `args` é um array (`Expression[]`), você deve ajustar para:
+
+```typescript
+Babel.callExpression(func, args);
+```
+
+Ou, se `args` é um único `Expression`, certifique-se de não colocá-lo dentro de um array adicional.
+
+---
+
+**Observação Final:**
+
+Após aplicar todas essas correções, seu código deve compilar sem os erros mencionados. As principais mudanças envolveram ajustar os tipos e utilizar as funcionalidades do Babel para garantir que os nodes gerados correspondam aos tipos esperados.
+
+---
+
+**Dicas Adicionais:**
+
+- Sempre que trabalhar com ASTs usando o Babel, é importante ter clareza sobre os tipos de nodes que você está manipulando.
+- Ao lidar com block statements (como `IfStatement`, `SwitchStatement`, etc.), lembre-se de que eles não são expressões e, portanto, não podem ser usados onde uma expressão é esperada. Envolver esses blocks em IIFEs é uma forma comum de contornar isso.
+- Utilize as funções de verificação de tipo do Babel (como `Babel.isArrowFunctionExpression`) para garantir que está manipulando o tipo de node correto.
+
+Espero que isso ajude a resolver os erros no seu código!
