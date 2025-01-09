@@ -6,12 +6,17 @@ export const extractHelpers = (hbsTemplate: AST.Template): Set<string> => {
   traverse(hbsTemplate, {
     SubExpression(node) {
       const helperName = (node.path as AST.PathExpression).original;
-      helpers.add(helperName);
+      if (isValidHelperName(helperName)) {
+        helpers.add(helperName);
+      }
     },
     MustacheStatement(node) {
       if (node.path.type === "PathExpression") {
         const helperName = node.path.original;
-        if (node.params.length > 0 || Object.keys(node.hash).length > 0) {
+        if (
+          (node.params.length > 0 || Object.keys(node.hash).length > 0) &&
+          isValidHelperName(helperName)
+        ) {
           helpers.add(helperName);
         }
       }
@@ -20,3 +25,9 @@ export const extractHelpers = (hbsTemplate: AST.Template): Set<string> => {
 
   return helpers;
 };
+
+function isValidHelperName(name: string) {
+  // Exemplo: só aceita se NÃO tiver ponto, barra nem hífen.
+  // Ajuste conforme sua convenção de nomes de helpers
+  return /^[A-Za-z0-9_]+$/.test(name);
+}

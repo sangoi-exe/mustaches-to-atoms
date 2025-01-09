@@ -40,13 +40,19 @@ export const resolveElementChild = (
   | Babel.JSXText
   | Babel.JSXElement
   | Babel.JSXExpressionContainer
-  | Array<Babel.JSXText | Babel.JSXExpressionContainer> => {
+  | Array<Babel.JSXText | Babel.JSXExpressionContainer>
+  | null => {
   switch (statement.type) {
     case "ElementNode": {
       return convertElement(statement);
     }
 
     case "TextNode": {
+      if (!statement.chars.trim()) {
+        // Retorna null indicando que esse text node não deve virar JSX
+        return null;
+      }
+      // Caso queira manter text normal, chame a prepareJsxText
       return prepareJsxText(statement.chars);
     }
 
@@ -132,9 +138,10 @@ export const prepareJsxText = (
   text: string,
 ): Babel.JSXText | Array<Babel.JSXText | Babel.JSXExpressionContainer> => {
   const parts = text.split(/({|})/);
+  const cleaned = text.replace(/\s+/g, " ").trim();
 
   if (parts.length === 1) {
-    return Babel.jsxText(text);
+    return Babel.jsxText(cleaned);
   }
 
   return parts.map((item) =>
@@ -154,6 +161,9 @@ export const createChildren = (
   body.reduce(
     (acc, statement) => {
       const child = resolveElementChild(statement);
+      if (!child) {
+        return acc;
+      }
 
       return Array.isArray(child) ? [...acc, ...child] : [...acc, child];
     },

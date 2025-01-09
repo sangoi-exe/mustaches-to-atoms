@@ -2,8 +2,7 @@
 
 import * as Babel from "@babel/types";
 import { AST } from "@glimmer/syntax";
-import { resolveExpression } from "./expressions.js";
-import { createChildren } from "./expressions.js";
+import { resolveExpression, createChildren } from "./expressions.js";
 
 /**
  * Verifica se é um node que representa partial customizado (ex.: {{__partial__ "nome"}}).
